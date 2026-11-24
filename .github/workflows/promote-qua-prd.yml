@@ -1,8 +1,8 @@
 name: Promotor QUA → PRD
 
 # Mantém aberto o PR "Promoção QUA → PRD" e faz o merge quando o gate passa:
-# checks verdes + aprovação de quem tem escrita (ver .github/scripts/promote.cjs).
-# `PRD` é o release (publish.yml), por isso nunca promove sem aprovação humana.
+# checks verdes, sem conflitos e sem pedidos de alterações (ver .github/scripts/promote.cjs).
+# A aprovação de outro colaborador é opcional: para a exigir, pôr MIN_APPROVALS a 1 ou mais.
 #
 # Requisitos: Settings → Actions → General → "Allow GitHub Actions to create and approve
 # pull requests" activo, OU o secret PROMOTE_TOKEN (PAT com scope "repo"; com ele os workflows
@@ -50,6 +50,7 @@ jobs:
       PROD_BRANCH: PRD
       REQUIRED_CHECKS: 'Typecheck,Tests,Bots scripts,Docker build'
       PUBLISH_WORKFLOW: publish.yml
+      MIN_APPROVALS: '0'
       MERGE: ${{ github.event_name == 'workflow_dispatch' && inputs.merge || 'true' }}
       PROMOTE_TOKEN_SET: ${{ secrets.PROMOTE_TOKEN != '' && 'true' || '' }}
     steps:

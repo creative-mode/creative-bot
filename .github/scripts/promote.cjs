@@ -4,7 +4,8 @@
 //   - prepara sozinho o PR `QUA → PRD` com a lista do que vai sair;
 //   - só faz merge quando o gate passa:
 //       1. os checks obrigatórios estão verdes no head do PR (= head de `QUA`);
-//       2. há ≥1 aprovação, no head actual, de quem tem escrita (e que não é o autor do PR);
+//       2. aprovação opcional: só exigida se MIN_APPROVALS > 0 (por defeito 0). Quando exigida, conta só
+//          aprovações no head actual, de quem tem escrita e que não é o autor do PR;
 //       3. ninguém pediu alterações, não há conflitos e o PR não é rascunho.
 //   - depois do merge dispara o publish.yml, porque merges feitos com GITHUB_TOKEN não disparam workflows.
 
@@ -40,7 +41,7 @@ function latestReviewStates(reviews) {
  * Decide se a promoção pode avançar. Devolve { ok, items:[{ ok, text }] } para o PR mostrar o que falta.
  * `checkRuns` são os check-runs do head do PR; `permissions` mapeia login → nível no repositório.
  */
-function gate({ pr, requiredChecks, checkRuns, reviews, permissions, minApprovals = 1 }) {
+function gate({ pr, requiredChecks, checkRuns, reviews, permissions, minApprovals = 0 }) {
   const items = [];
   const add = (ok, text) => items.push({ ok: Boolean(ok), text });
   const short = pr.head.sha.slice(0, 7);
@@ -63,6 +64,8 @@ function gate({ pr, requiredChecks, checkRuns, reviews, permissions, minApproval
   const states = latestReviewStates(reviews);
   const blockers = [...states].filter(([, v]) => v.state === 'CHANGES_REQUESTED').map(([login]) => `@${login}`);
   add(blockers.length === 0, blockers.length ? `Alterações pedidas por ${blockers.join(', ')}` : 'Sem pedidos de alterações');
+
+  if (minApprovals <= 0) return { ok: items.every((i) => i.ok), items };
 
   const approvals = [...states].filter(
     ([login, v]) => v.state === 'APPROVED'
@@ -94,7 +97,7 @@ function buildBody({ commitCount, partial, changes, result, merging }) {
   lines.push('');
   lines.push(result && result.ok
     ? (merging ? '✅ Gate cumprido — o bot vai fazer o merge.' : '✅ Gate cumprido (merge automático desligado nesta execução).')
-    : '⏳ Para promover: aprovar este PR (quem tem escrita) quando os checks estiverem verdes. O bot faz o resto.');
+    : '⏳ Para promover: os itens por cumprir estão acima. O bot faz o merge quando estiverem todos marcados.');
   lines.push(MARKER_END);
   return lines.join('\n');
 }
@@ -117,6 +120,7 @@ module.exports = async ({ github, context, core }) => {
   const usingPat = process.env.PROMOTE_TOKEN_SET === 'true';
   const mergeAllowed = process.env.MERGE !== 'false';
   const sleepMs = Number(process.env.RETRY_SLEEP_MS ?? 2000);
+  const minApprovals = Number(process.env.MIN_APPROVALS || 0);
 
   // 1. Há algo novo em QUA?
   const cmp = await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead: `${PROD}...${QUA}`, per_page: 100 });
@@ -174,7 +178,7 @@ module.exports = async ({ github, context, core }) => {
     }
   }
 
-  const result = gate({ pr: fresh, requiredChecks, checkRuns, reviews, permissions });
+  const result = gate({ pr: fresh, requiredChecks, checkRuns, reviews, permissions, minApprovals });
   const generated = buildBody({ ...info, result, merging: mergeAllowed });
   const body = mergeBody(fresh.body, generated);
   if (body !== fresh.body || fresh.title !== TITLE) {

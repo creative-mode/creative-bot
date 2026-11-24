@@ -30,7 +30,7 @@ Fluxo: `issue → branch → PR para DEV → DEV → QUA → PRD`. `PRD` é a br
 | --- | --- | --- |
 | `ci.yml` | push e PR para `DEV`, `QUA`, `PRD` | `Typecheck` (tsc), `Tests` (bun test), `Bots scripts` (node --test) e `Docker build` |
 | `pr-check.yml` | cada PR | Valida o nome da branch (`<tipo>/[<n.º issue>-]<descricao>`, ex.: `feature/23-login` ou `feature/login`) e o destino. Associar uma issue (`Closes #n` / `Refs #n`) é opcional; se a branch tiver número e o PR associar issues, o número tem de estar entre elas. PRs de funcionalidade vão para `DEV`; `hotfix/*` pode ir para `DEV` ou `QUA`; `PRD` só aceita `QUA`. |
-| `promote-qua-prd.yml` | push em `QUA`, fim do CI em `QUA`, revisões | Mantém aberto o PR "Promoção QUA → PRD" e faz o merge quando os checks estão verdes e há aprovação de quem tem escrita. |
+| `promote-qua-prd.yml` | push em `QUA`, fim do CI em `QUA`, revisões | Mantém aberto o PR "Promoção QUA → PRD" e faz o merge quando os checks estão verdes, sem conflitos nem pedidos de alterações. A aprovação de outro colaborador é opcional (`MIN_APPROVALS`, por defeito `0`). |
 | `publish.yml` | push em `PRD` (ou manual) | Constrói e publica a imagem em `ghcr.io/creative-mode/creative-bot` (`latest` + sha curto). |
 | `dependency-audit.yml` | dia 1 de cada mês (ou manual) | `bun audit`, sem bloquear. |
 
