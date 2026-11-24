@@ -1,0 +1,13 @@
+.git
+.github
+node_modules
+.env
+.env.*
+!.env.example
+data
+coverage
+*.sqlite
+*.sqlite-*
+test
+*.md
+config/config.json

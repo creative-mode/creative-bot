@@ -4,7 +4,11 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "typecheck": "bun check"
+    "start": "bun run index.ts",
+    "dev": "bun --watch index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "test:bots": "node --test .github/scripts/bots.test.cjs"
   },
   "devDependencies": {
     "@types/bun": "latest"
