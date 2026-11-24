@@ -105,23 +105,25 @@ Sem `ANTHROPIC_API_KEY`, a moderação fica desligada com aviso no arranque.
 ## 5. Base de dados (SQLite)
 
 - `github_messages(key PK, channel_id, message_id, updated_at)` — `key` = `repo#pr|issue#número`.
-- `deliveries(id PK, received_at)` — dedupe por `x-github-delivery` (limpar entradas antigas).
+- `deliveries(id PK, status, received_at)` — dedupe por `x-github-delivery`. `status` = `processing | done`. Entregas com mais de 7 dias são apagadas no arranque e uma vez por dia.
 - `strikes(id, user_id, channel_id, message_id, reason, created_at, dry_run)` — strikes de ensaio não contam para escalonar.
 - `mod_reviews(id, user_id, status, message_id, created_at)` — `pending | banned | timeout | dismissed`.
 - `onboarding(user_id PK, selected_products, status)`.
 - `github_links(discord_id PK, github_id UNIQUE, github_login, linked_at)`.
+- `oauth_states(state PK, discord_id, expires_at)` — `state` do `/vincular`: apagado ao ser usado; os expirados são limpos periodicamente.
 
 ## 6. Funcionalidades
 
 ### 6.1 GitHub → Discord
 
 - **Endpoint** `POST /webhooks/github`: ler o corpo bruto com `req.text()`, verificar `x-hub-signature-256` (HMAC SHA-256 + `timingSafeEqual`), ignorar `ping`, deduplicar por `x-github-delivery`, responder **202** e processar em segundo plano.
+- **Dedupe:** ao receber, inserir a entrega como `processing`; se o ID já existir, responder 202 e ignorar. No fim, marcar como `done`. Se o processamento falhar, **apagar** a entrega, para que um *Redeliver* no GitHub (que traz o mesmo ID) volte a ser processado.
 - **Roteamento:** `repository.full_name` (minúsculas) → produto → `githubChannelId`. Repos não mapeados são ignorados.
 - **Eventos:** `pull_request`, `pull_request_review`, `issues`.
 - **Embed da PR:** título + link, resumo do corpo (sem comentários HTML, truncado), `branch → base`, `+adições −remoções · N ficheiros`, labels, estado por cor (aberta, rascunho, merged, fechada).
   - **Quem fez:** autor da PR.
   - **Quem fará:** assignees.
-  - **Quem revê:** `requested_reviewers` e equipas.
+  - **Quem revê:** `requested_reviewers` (pessoas). Pedidos de revisão a equipas (`requested_team`) são ignorados: os reviewers são sempre pessoas.
 - **Embed da issue:** igual, com autor, assignees, labels, estado e motivo de fecho (`completed` / `not_planned`).
 - **Menções:** resolver o login via `github_links` (preferir `github_id` ao login, que pode mudar). Quem não estiver vinculado aparece como link para o perfil. Menções dentro de embeds não notificam.
 - **Uma mensagem por PR/issue:** criar na primeira ocorrência relevante (`opened`, `reopened`, `ready_for_review`, `review_requested`, `assigned` em issues) e **editar** nas seguintes (`edited`, `labeled`, `converted_to_draft`, `closed`, etc.). Eventos de actualização sem mensagem existente não criam mensagens novas.
@@ -167,11 +169,12 @@ Sem `ANTHROPIC_API_KEY`, a moderação fica desligada com aviso no arranque.
 Objectivo: ligar cada conta Discord a uma conta GitHub **com prova de propriedade**, para mencionar as pessoas certas.
 
 Proposta (a confirmar no teste inicial): usar o OAuth2 do Discord com os scopes `identify connections`.
-1. `/vincular` responde (efémero) com um link para `PUBLIC_BASE_URL/vincular/start?state=…`, onde `state` é um token de uso único, curto e associado ao utilizador.
+1. `/vincular iniciar` responde (efémero) com um link para `PUBLIC_BASE_URL/vincular/start?state=…`, onde `state` é um token aleatório, de uso único, associado ao utilizador e guardado em `oauth_states` com validade de 10 minutos.
 2. A página redirecciona para o consentimento OAuth2 do Discord.
-3. No callback, o bot troca o código, lê as ligações da conta e procura a do tipo `github`. Guarda `github_id` e `github_login` em `github_links`.
+3. No callback (`PUBLIC_BASE_URL/vincular/callback`, registado como *redirect* no Developer Portal), o bot valida e apaga o `state`, troca o código, lê as ligações da conta e procura a do tipo `github`. Guarda `github_id` e `github_login` em `github_links`.
 4. Se a pessoa não tiver o GitHub ligado no perfil do Discord, a página explica como ligar e tentar de novo.
-- Comandos auxiliares: `/vincular ver` (mostrar o vínculo actual), `/desvincular`, e um comando só para administradores que vincula manualmente (`/vincular-admin utilizador login`) para casos sem GitHub ligado.
+- `/vincular` é um comando com subcomandos (o Discord não deixa chamar sozinho um comando que tenha subcomandos): `/vincular iniciar` e `/vincular ver` (mostrar o vínculo actual).
+- Comandos auxiliares: `/desvincular`, e um comando só para administradores que vincula manualmente (`/vincular-admin utilizador login`) para casos sem GitHub ligado. O bot obtém o `github_id` com `GET https://api.github.com/users/{login}` (API pública, sem token); se o login não existir (404), responde com erro e não guarda nada.
 - Alternativa se o ponto 3 não funcionar como esperado: OAuth App do GitHub (fluxo web), que prova a posse directamente, à custa de criar mais uma aplicação.
 - Registar os slash commands no arranque (por guild, para propagarem de imediato).
 
@@ -180,6 +183,8 @@ Proposta (a confirmar no teste inicial): usar o OAuth2 do Discord com os scopes 
 - **Intents privilegiadas:** Server Members e Message Content (activar no Developer Portal).
 - **Permissões do bot:** ver canais, enviar mensagens, embeds, ler histórico, gerir cargos, moderar membros (timeout), banir.
 - O cargo do bot tem de estar **acima** dos cargos que atribui (Novo, Membro, cargos de produto).
+- **Visibilidade por produto:** é configurada nas permissões dos canais, não pelo bot. Cada canal (ou categoria) de produto nega *Ver canal* a `@everyone` e permite-o ao cargo do produto. O bot só atribui os cargos.
+- **OAuth2:** registar `PUBLIC_BASE_URL/vincular/callback` em OAuth2 → Redirects. Tem de coincidir exactamente com o `redirect_uri` enviado pelo bot.
 - Webhook do GitHub: URL público `/webhooks/github`, `application/json`, segredo partilhado, eventos *Issues*, *Pull requests*, *Pull request reviews*.
 
 ## 8. Segurança e privacidade
@@ -203,8 +208,8 @@ Proposta (a confirmar no teste inicial): usar o OAuth2 do Discord com os scopes 
 
 - Uma PR aberta com 2 reviewers gera **uma** mensagem no canal certo, com autor, reviewers e estado, e dois pings (um por reviewer).
 - Fechar ou fazer merge actualiza a mesma mensagem e responde a ela.
-- Pedidos com assinatura inválida recebem 401; entregas repetidas não duplicam mensagens.
+- Pedidos com assinatura inválida recebem 401; entregas repetidas não duplicam mensagens; uma entrega cujo processamento falhou volta a ser processada num *Redeliver*.
 - Em ensaio, mensagens fora do tema só aparecem no canal de log; fora do ensaio, seguem aviso → timeout → cartão.
 - Nenhum ban acontece sem clique de um moderador autorizado.
 - Um membro novo consegue concluir o onboarding e passa a ver apenas os canais dos produtos escolhidos.
-- `/vincular` liga uma conta e as menções passam a usar `<@id>`.
+- `/vincular iniciar` liga uma conta e as menções passam a usar `<@id>`.

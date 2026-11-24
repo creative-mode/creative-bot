@@ -21,13 +21,34 @@ bun run test:bots    # testes dos scripts de CI (Node)
 
 ## Configuração
 
-Em construção. Esta secção vai descrever:
+Em construção. Ainda faltam:
 
 - variáveis de ambiente (`.env`, a partir de `.env.example`);
 - `config/config.json` (a partir de `config/config.example.json`);
-- configuração da aplicação no Discord Developer Portal (intents, permissões, OAuth2);
-- configuração do webhook do GitHub;
-- permissões dos canais de cada produto.
+- intents e permissões do bot no Discord Developer Portal;
+- configuração do webhook do GitHub.
+
+### OAuth2 do `/vincular`
+
+No [Discord Developer Portal](https://discord.com/developers/applications), na aplicação do bot:
+
+1. Abrir **OAuth2** → **Redirects** e acrescentar `<PUBLIC_BASE_URL>/vincular/callback`, por exemplo `https://bot.exemplo.ao/vincular/callback`.
+2. O endereço tem de coincidir **exactamente** com o que o bot envia: mesmo protocolo, mesmo domínio, sem `/` no fim. Se não coincidir, o Discord recusa o consentimento com `Invalid OAuth2 redirect_uri`.
+3. Copiar o **Client ID** e o **Client Secret** para `DISCORD_CLIENT_ID` e `DISCORD_CLIENT_SECRET` no `.env`.
+
+### Permissões dos canais de cada produto
+
+O bot só atribui cargos. Quem decide o que cada membro vê são as permissões dos canais, que se configuram à mão no Discord:
+
+1. Pôr os canais de cada produto numa categoria própria (por exemplo, «Produto X»).
+2. Nas permissões da categoria:
+   - `@everyone`: **Ver canal** negado;
+   - cargo do produto (o `roleId` em `config.json`): **Ver canal** permitido.
+3. Sincronizar as permissões dos canais com a categoria.
+4. O canal de boas-vindas tem de ser visível ao cargo «Novo», para o membro conseguir fazer o onboarding.
+5. No **Server Settings** → **Roles**, o cargo do bot tem de estar **acima** dos cargos «Novo», «Membro» e de todos os cargos de produto. Se não estiver, o Discord recusa a atribuição.
+
+Para confirmar: com **View Server As Role** (em Server Settings → Roles), escolher só o cargo de um produto e verificar que aparecem apenas os canais desse produto.
 
 ## Testes manuais
 
