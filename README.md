@@ -1,26 +1,37 @@
 # creative-bot
 
-To install dependencies:
+Bot de Discord por produto: PRs e issues do GitHub num canal por produto, moderação de conversas fora do tema e onboarding de novos membros.
+
+A especificação completa está em [`PLANO.md`](PLANO.md). As regras de trabalho no repositório estão em [`CLAUDE.md`](CLAUDE.md).
+
+## Requisitos
+
+- [Bun](https://bun.com) 1.4.4 ou superior (a versão usada no CI e no `Dockerfile`).
+
+## Comandos
 
 ```bash
-bun install
+bun install          # instalar dependências
+bun run start        # arrancar o bot
+bun run dev          # desenvolvimento, com recarga automática
+bun run test         # testes
+bun run typecheck    # verificação de tipos
+bun run test:bots    # testes dos scripts de CI (Node)
 ```
 
-To run:
+## Configuração
 
-```bash
-bun run index.ts
-```
+Em construção. Esta secção vai descrever:
 
-To type check:
+- variáveis de ambiente (`.env`, a partir de `.env.example`);
+- `config/config.json` (a partir de `config/config.example.json`);
+- configuração da aplicação no Discord Developer Portal (intents, permissões, OAuth2);
+- configuração do webhook do GitHub;
+- permissões dos canais de cada produto.
 
-```bash
-bun run typecheck
-```
+## Testes manuais
 
-Run `bun fmt` to format the code.
-
-This project was created using `bun init` in bun v1.4.5. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+Em construção. Os critérios de aceitação que não forem cobertos por testes automáticos vão ser descritos aqui, marco a marco.
 
 ## CI/CD
 
