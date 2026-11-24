@@ -71,7 +71,7 @@ test/
 
 ## Fora do âmbito
 
-Deploy, Dockerfile e CI: tratados à parte. Não criar sem pedido.
+Deploy no servidor: tratado à parte, não criar sem pedido. O CI/CD (`.github/workflows`) e o `Dockerfile` já existem e estão descritos no README; ao mudar o arranque (`src/index.ts`), actualizar o script `start` do `package.json`, que o `Dockerfile` usa.
 
 ## Definição de pronto
 
