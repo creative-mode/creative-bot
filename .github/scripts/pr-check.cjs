@@ -2,13 +2,14 @@
 // Issue → Branch → Commit → Pull Request → Merge.
 //
 // Regras:
-//  1. A branch segue  <tipo>/<n.º da issue>-<descricao-curta>   (ex.: feature/23-login-com-jwt)
-//  2. O PR associa a issue da branch com "Closes #23" ou "Refs #23".
+//  1. A branch segue  <tipo>/[<n.º da issue>-]<descricao-curta>   (ex.: feature/23-login-com-jwt ou feature/login-com-jwt)
+//  2. A issue é opcional. Se o PR associar issues ("Closes #23" / "Refs #23") e a branch tiver número,
+//     esse número tem de estar entre as issues associadas.
 //  3. O PR aponta para a branch de integração (DEV). Promoções seguem DEV → QUA → PRD.
 //  4. hotfix/* pode apontar a DEV ou a QUA. A PRD só chega promoção vinda de QUA — sem excepção.
 
 const TYPES = 'feature|feat|bug|fix|hotfix|refactor|docs|test|tests|chore|ci|devops|perf';
-const BRANCH_RE = new RegExp(`^(${TYPES})/(\\d+)-[a-z0-9][a-z0-9._-]*$`);
+const BRANCH_RE = new RegExp(`^(${TYPES})/(?:(\\d+)-)?[a-z0-9][a-z0-9._-]*$`);
 const CLOSE_RE = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+((?:(?:[\w.-]+\/[\w.-]+)?#\d+(?:\s*,\s*|\s+e\s+|\s+and\s+)?)+)/gi;
 const REFERENCE_RE = /\brefs?\s*:?\s+((?:(?:[\w.-]+\/[\w.-]+)?#\d+(?:\s*,\s*|\s+e\s+|\s+and\s+)?)+)/gi;
 const MARKER = '<!-- pr-check -->';
@@ -53,7 +54,7 @@ function evaluate({ head, base, body, ownRepo, branches, isBot = false }) {
 
   const m = BRANCH_RE.exec(head);
   if (!m) {
-    problems.push(`O nome da branch \`${head}\` não segue o padrão \`<tipo>/<n.º da issue>-<descricao-curta>\` (ex.: \`feature/23-login-com-jwt\`). Tipos: ${TYPES.split('|').join(', ')}. Usa minúsculas, sem espaços.`);
+    problems.push(`O nome da branch \`${head}\` não segue o padrão \`<tipo>/[<n.º da issue>-]<descricao-curta>\` (ex.: \`feature/23-login-com-jwt\` ou \`feature/login-com-jwt\`). Tipos: ${TYPES.split('|').join(', ')}. Usa minúsculas, sem espaços.`);
   }
 
   if (m && m[1] !== 'hotfix' && base !== dev) {
@@ -61,9 +62,8 @@ function evaluate({ head, base, body, ownRepo, branches, isBot = false }) {
   }
 
   const refs = linkedRefs(body, ownRepo);
-  if (refs.length === 0) {
-    problems.push('O PR tem de associar a issue da branch com Closes ou Refs.');
-  } else if (m && !refs.includes(Number(m[2]))) {
+  // Issue opcional: só há conflito quando o PR associa issues e nenhuma é a da branch.
+  if (refs.length > 0 && m && m[2] && !refs.includes(Number(m[2]))) {
     problems.push(`A branch refere a issue #${m[2]}, mas o PR só associa ${refs.map((n) => `#${n}`).join(', ')}. Acrescenta Refs ou Closes para #${m[2]}, ou corrige o nome da branch.`);
   }
   return problems;

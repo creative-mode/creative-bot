@@ -12,15 +12,17 @@ test('Refs associa a issue sem a classificar como encerrada', () => {
   assert.deepEqual(closingRefs('Refs #23', 'creative-mode/creative-bot'), []);
   assert.deepEqual(linkedRefs('Refs #23', 'creative-mode/creative-bot'), [23]);
 });
-test('branch fora do padrão', () => assert.equal(evaluate({ ...base, head: 'feat/auth-register' }).length, 1));
+test('branch fora do padrão', () => assert.equal(evaluate({ ...base, head: 'feat/Auth Register' }).length, 1));
+test('branch sem número de issue é aceite', () => assert.deepEqual(evaluate({ ...base, head: 'feat/auth-register', body: '' }), []));
+test('branch sem número aceita qualquer issue associada', () => assert.deepEqual(evaluate({ ...base, head: 'feat/auth-register', body: 'Refs #99' }), []));
 test('destino errado', () => assert.match(evaluate({ ...base, base: 'QUA' })[0], /apontam para `DEV`/));
-test('sem referência', () => assert.match(evaluate({ ...base, body: 'só texto' })[0], /associar a issue/));
+test('sem referência: issue é opcional', () => assert.deepEqual(evaluate({ ...base, body: 'só texto' }), []));
 test('Closes de outra issue', () => assert.match(evaluate({ ...base, body: 'Closes #99' })[0], /refere a issue #23/));
 test('Refs de outra issue não satisfaz a associação da branch', () => assert.match(evaluate({ ...base, body: 'Refs #99' })[0], /branch refere a issue #23/));
-test('Closes em comentário/código não conta', () => assert.equal(evaluate({ ...base, body: '<!-- Closes #23 -->\n`Closes #23`' }).length, 1));
-test('Refs em comentário/código não conta', () => assert.equal(evaluate({ ...base, body: '<!-- Refs #23 -->\n`Refs #23`' }).length, 1));
+test('Closes em comentário/código não conta', () => assert.deepEqual(linkedRefs('<!-- Closes #23 -->\n`Closes #23`', base.ownRepo), []));
+test('Refs em comentário/código não conta', () => assert.deepEqual(linkedRefs('<!-- Refs #23 -->\n`Refs #23`', base.ownRepo), []));
 test('várias issues e fixes', () => assert.deepEqual(evaluate({ ...base, body: 'Fixes #5, #23 e #7' }), []));
-test('issue de outro repo não satisfaz', () => assert.equal(evaluate({ ...base, body: 'Closes creative-mode/outro-repo#23' }).length, 1));
+test('issue de outro repo é ignorada', () => assert.deepEqual(linkedRefs('Closes creative-mode/outro-repo#23', base.ownRepo), []));
 test('promoções', () => {
   assert.deepEqual(evaluate({ ...base, head: 'DEV', base: 'QUA', body: '' }), []);
   assert.deepEqual(evaluate({ ...base, head: 'QUA', base: 'PRD', body: '' }), []);
