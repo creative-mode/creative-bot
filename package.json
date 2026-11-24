@@ -1,13 +1,16 @@
 {
   "name": "creative-bot",
-  "module": "index.ts",
+  "module": "src/index.ts",
   "type": "module",
   "private": true,
   "scripts": {
-    "typecheck": "bun check"
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch src/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "1.4.5"
   },
   "peerDependencies": {
     "typescript": "^7"
