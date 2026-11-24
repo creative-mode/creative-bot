@@ -7,10 +7,11 @@
     "start": "bun run src/index.ts",
     "dev": "bun --watch src/index.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:bots": "node --test .github/scripts/bots.test.cjs"
   },
   "devDependencies": {
-    "@types/bun": "1.4.5"
+    "@types/bun": "1.4.4"
   },
   "peerDependencies": {
     "typescript": "^7"
