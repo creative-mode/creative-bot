@@ -12,15 +12,17 @@ test('Refs associa a issue sem a classificar como encerrada', () => {
   assert.deepEqual(closingRefs('Refs #23', 'creative-mode/creative-bot'), []);
   assert.deepEqual(linkedRefs('Refs #23', 'creative-mode/creative-bot'), [23]);
 });
-test('branch fora do padrão', () => assert.equal(evaluate({ ...base, head: 'feat/auth-register' }).length, 1));
+test('branch fora do padrão', () => assert.equal(evaluate({ ...base, head: 'feat/Auth Register' }).length, 1));
+test('branch sem número de issue é aceite', () => assert.deepEqual(evaluate({ ...base, head: 'feat/auth-register', body: '' }), []));
+test('branch sem número aceita qualquer issue associada', () => assert.deepEqual(evaluate({ ...base, head: 'feat/auth-register', body: 'Refs #99' }), []));
 test('destino errado', () => assert.match(evaluate({ ...base, base: 'QUA' })[0], /apontam para `DEV`/));
-test('sem referência', () => assert.match(evaluate({ ...base, body: 'só texto' })[0], /associar a issue/));
+test('sem referência: issue é opcional', () => assert.deepEqual(evaluate({ ...base, body: 'só texto' }), []));
 test('Closes de outra issue', () => assert.match(evaluate({ ...base, body: 'Closes #99' })[0], /refere a issue #23/));
 test('Refs de outra issue não satisfaz a associação da branch', () => assert.match(evaluate({ ...base, body: 'Refs #99' })[0], /branch refere a issue #23/));
-test('Closes em comentário/código não conta', () => assert.equal(evaluate({ ...base, body: '<!-- Closes #23 -->\n`Closes #23`' }).length, 1));
-test('Refs em comentário/código não conta', () => assert.equal(evaluate({ ...base, body: '<!-- Refs #23 -->\n`Refs #23`' }).length, 1));
+test('Closes em comentário/código não conta', () => assert.deepEqual(linkedRefs('<!-- Closes #23 -->\n`Closes #23`', base.ownRepo), []));
+test('Refs em comentário/código não conta', () => assert.deepEqual(linkedRefs('<!-- Refs #23 -->\n`Refs #23`', base.ownRepo), []));
 test('várias issues e fixes', () => assert.deepEqual(evaluate({ ...base, body: 'Fixes #5, #23 e #7' }), []));
-test('issue de outro repo não satisfaz', () => assert.equal(evaluate({ ...base, body: 'Closes creative-mode/outro-repo#23' }).length, 1));
+test('issue de outro repo é ignorada', () => assert.deepEqual(linkedRefs('Closes creative-mode/outro-repo#23', base.ownRepo), []));
 test('promoções', () => {
   assert.deepEqual(evaluate({ ...base, head: 'DEV', base: 'QUA', body: '' }), []);
   assert.deepEqual(evaluate({ ...base, head: 'QUA', base: 'PRD', body: '' }), []);
@@ -59,14 +61,15 @@ const approval = { user: { login: 'revisor', type: 'User' }, state: 'APPROVED', 
 const gArgs = { pr: gPr, requiredChecks: ['Typecheck', 'Tests'], checkRuns: okRuns, reviews: [approval], permissions: { revisor: 'write' } };
 
 test('promote: gate cumprido', () => assert.equal(promote.gate(gArgs).ok, true));
-test('promote: sem aprovação', () => assert.equal(promote.gate({ ...gArgs, reviews: [] }).ok, false));
+test('promote: sem aprovação passa por defeito', () => assert.equal(promote.gate({ ...gArgs, reviews: [] }).ok, true));
+test('promote: sem aprovação bloqueia com minApprovals 1', () => assert.equal(promote.gate({ ...gArgs, reviews: [], minApprovals: 1 }).ok, false));
 test('promote: aprovação antiga (outro commit) não conta', () =>
-  assert.equal(promote.gate({ ...gArgs, reviews: [{ ...approval, commit_id: 'velho' }] }).ok, false));
+  assert.equal(promote.gate({ ...gArgs, reviews: [{ ...approval, commit_id: 'velho' }], minApprovals: 1 }).ok, false));
 test('promote: autor não se auto-aprova', () =>
-  assert.equal(promote.gate({ ...gArgs, reviews: [{ ...approval, user: { login: 'autor', type: 'User' } }], permissions: { autor: 'admin' } }).ok, false));
+  assert.equal(promote.gate({ ...gArgs, reviews: [{ ...approval, user: { login: 'autor', type: 'User' } }], permissions: { autor: 'admin' }, minApprovals: 1 }).ok, false));
 test('promote: aprovação sem escrita ou de bot não conta', () => {
-  assert.equal(promote.gate({ ...gArgs, permissions: { revisor: 'read' } }).ok, false);
-  assert.equal(promote.gate({ ...gArgs, reviews: [{ ...approval, user: { login: 'revisor', type: 'Bot' } }] }).ok, false);
+  assert.equal(promote.gate({ ...gArgs, permissions: { revisor: 'read' }, minApprovals: 1 }).ok, false);
+  assert.equal(promote.gate({ ...gArgs, reviews: [{ ...approval, user: { login: 'revisor', type: 'Bot' } }], minApprovals: 1 }).ok, false);
 });
 test('promote: alterações pedidas depois da aprovação bloqueiam', () =>
   assert.equal(promote.gate({ ...gArgs, reviews: [approval, { ...approval, state: 'CHANGES_REQUESTED' }] }).ok, false));
@@ -119,7 +122,7 @@ const pctx = { repo: { owner: 'creative-mode', repo: 'creative-bot' } };
 const pcore = { info() {}, warning() {}, setFailed(m) { throw new Error(m); } };
 function setPromoteEnv(extra = {}) {
   delete process.env.PROMOTE_TOKEN_SET;
-  Object.assign(process.env, { QUA_BRANCH: 'QUA', PROD_BRANCH: 'PRD', REQUIRED_CHECKS: 'Typecheck,Tests', PUBLISH_WORKFLOW: 'publish.yml', RETRY_SLEEP_MS: '0', MERGE: 'true' }, extra);
+  Object.assign(process.env, { QUA_BRANCH: 'QUA', PROD_BRANCH: 'PRD', REQUIRED_CHECKS: 'Typecheck,Tests', PUBLISH_WORKFLOW: 'publish.yml', RETRY_SLEEP_MS: '0', MERGE: 'true', MIN_APPROVALS: '0' }, extra);
 }
 
 test('promote: nada em QUA → não faz nada', async () => {
@@ -128,11 +131,17 @@ test('promote: nada em QUA → não faz nada', async () => {
   await promote({ github, context: pctx, core: pcore });
   assert.deepEqual(calls, []);
 });
-test('promote: cria o PR e, sem aprovação, não faz merge', async () => {
-  setPromoteEnv();
+test('promote: com MIN_APPROVALS=1, cria o PR e, sem aprovação, não faz merge', async () => {
+  setPromoteEnv({ MIN_APPROVALS: '1' });
   const { github, calls } = mockPromote({ reviews: [] });
   await promote({ github, context: pctx, core: pcore });
   assert.deepEqual(calls.map((c) => c[0]), ['create', 'update']);
+});
+test('promote: por defeito, sem aprovação, faz merge com checks verdes', async () => {
+  setPromoteEnv();
+  const { github, calls } = mockPromote({ reviews: [] });
+  await promote({ github, context: pctx, core: pcore });
+  assert.deepEqual(calls.map((c) => c[0]).filter((x) => x !== 'update'), ['create', 'merge', 'dispatch']);
 });
 test('promote: gate cumprido → merge com sha e dispara o publish', async () => {
   setPromoteEnv();
